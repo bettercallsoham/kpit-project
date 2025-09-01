@@ -1,0 +1,171 @@
+<!-- # Create the HTML file with Azure Maps integration
+html_content = """ -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Azure Maps Emergency Alert</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://atlas.microsoft.com/sdk/javascript/mapcontrol/2/atlas.min.js"></script>
+    <link rel="stylesheet" href="https://atlas.microsoft.com/sdk/javascript/mapcontrol/2/atlas.min.css">
+    <style>
+        #map {
+            width: 100%;
+            height: 600px;
+        }
+        #status {
+            margin: 20px 0;
+            padding: 10px;
+            background: #f8d7da;
+            color: #721c24;
+            border-radius: 5px;
+            font-size: 1.2em;
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+        }
+        .custom-popup {
+            font-family: Arial, sans-serif;
+            font-size: 1em;
+            padding: 4px 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Azure Maps Emergency Alert</h1>
+    <div id="status"></div>
+    <div id="map"></div>
+    <script>
+        const subscriptionKey = '';
+
+        // Step-by-step status messages
+        const statusMessages = [
+            "Driver detected as unconscious.",
+            "Autonomous mode activated.",
+            "Car pulling to left lane.",
+            "Locating nearest hospital...",
+            "Navigating to nearest hospital..."
+        ];
+        let statusIndex = 0;
+
+        function showNextStatus() {
+            document.getElementById('status').innerText = statusMessages[statusIndex];
+            statusIndex++;
+            if (statusIndex < statusMessages.length) {
+                setTimeout(showNextStatus, 2000);
+            }
+        }
+        showNextStatus();
+
+        // Helper: Find nearest hospital using Azure Maps Search API
+        function findNearestHospital(lat, lon, callback) {
+            const url = `https://atlas.microsoft.com/search/poi/json?subscription-key=${subscriptionKey}&api-version=1.0&query=hospital&lat=${lat}&lon=${lon}&limit=1`;
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.results && data.results.length > 0) {
+                        const hospital = data.results[0];
+                        callback({
+                            name: hospital.poi.name,
+                            position: [hospital.position.lon, hospital.position.lat]
+                        });
+                    } else {
+                        callback(null);
+                    }
+                })
+                .catch(() => callback(null));
+        }
+
+        // Helper: Draw route using Azure Maps Route API
+        function drawRoute(map, start, end) {
+            const routeUrl = `https://atlas.microsoft.com/route/directions/json?subscription-key=${subscriptionKey}&api-version=1.0&query=${start[1]},${start[0]}:${end[1]},${end[0]}`;
+            fetch(routeUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.routes && data.routes.length > 0) {
+                        const coordinates = data.routes[0].legs[0].points.map(pt => [pt.longitude, pt.latitude]);
+                        const routeLine = new atlas.data.LineString(coordinates);
+                        const routeFeature = new atlas.data.Feature(routeLine);
+                        const ds = new atlas.source.DataSource();
+                        map.sources.add(ds);
+                        ds.add(routeFeature);
+                        map.layers.add(new atlas.layer.LineLayer(
+                            ds,
+                            null,
+                            { strokeColor: 'blue', strokeWidth: 4 }
+                        ));
+                    }
+                });
+        }
+
+        // Get current location, find hospital, and show route
+        function initMapWithLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(pos) {
+                    const userLoc = [pos.coords.longitude, pos.coords.latitude];
+                    const map = new atlas.Map('map', {
+                        center: userLoc,
+                        zoom: 14,
+                        authOptions: {
+                            authType: 'subscriptionKey',
+                            subscriptionKey: subscriptionKey
+                        }
+                    });
+
+                    map.events.add('ready', function() {
+                        // Add car marker at user's location with "You" popup
+                        const carIcon = `<svg width="32" height="32" viewBox="0 0 32 32">
+                            <ellipse cx="16" cy="24" rx="8" ry="4" fill="#333"/>
+                            <rect x="8" y="10" width="16" height="8" rx="4" fill="#1976d2" stroke="#333" stroke-width="2"/>
+                            <rect x="12" y="6" width="8" height="6" rx="3" fill="#90caf9" stroke="#333" stroke-width="1"/>
+                            <circle cx="10" cy="22" r="2" fill="#333"/>
+                            <circle cx="22" cy="22" r="2" fill="#333"/>
+                        </svg>`;
+                        const carMarker = new atlas.HtmlMarker({
+                            htmlContent: carIcon,
+                            position: userLoc,
+                            popup: new atlas.Popup({
+                                content: `<div class="custom-popup"><b>You</b></div>`
+                            })
+                        });
+                        map.markers.add(carMarker);
+                        carMarker.togglePopup();
+
+                        // Find nearest hospital and show marker/route
+                        findNearestHospital(userLoc[1], userLoc[0], function(hospital) {
+                            if (hospital) {
+                                const hospitalMarker = new atlas.HtmlMarker({
+                                    color: 'red',
+                                    text: 'H',
+                                    position: hospital.position,
+                                    popup: new atlas.Popup({
+                                        content: `<div class="custom-popup"><b>${hospital.name}</b></div>`
+                                    })
+                                });
+                                map.markers.add(hospitalMarker);
+                                hospitalMarker.togglePopup();
+                                drawRoute(map, userLoc, hospital.position);
+                            } else {
+                                alert("No hospital found nearby.");
+                            }
+                        });
+                    });
+                }, function() {
+                    alert("Could not get your location.");
+                });
+            } else {
+                alert("Geolocation is not supported by this browser.");
+            }
+        }
+
+        // Start map logic
+        initMapWithLocation();
+    </script>
+</body>
+</html>
+<!-- """ 
+
+# Save the HTML content to a file
+with open('app/azure_map_alert.html', 'w') as file:
+    file.write(html_content)
+
+print("Azure Maps alert interface created successfully.") -->
